@@ -1,23 +1,9 @@
-/*
- * Hello Minecraft! Launcher
- * Copyright (C) 2025 huangyuhui <huanghongxun2008@126.com> and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-FileCopyrightText: Copyright (C) 2025 The HMCL Authors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH AdditionRef-HMCL
 package org.jackhuang.hmcl.setting;
 
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.scene.text.Font;
 import org.jackhuang.hmcl.Metadata;
@@ -36,7 +22,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
-import static org.jackhuang.hmcl.setting.ConfigHolder.config;
+import static org.jackhuang.hmcl.setting.SettingsManager.settings;
 import static org.jackhuang.hmcl.util.logging.Logger.LOG;
 
 /**
@@ -55,17 +41,17 @@ public final class FontManager {
 
         // Recommended
 
-        font = tryLoadLocalizedFont(Metadata.HMCL_CURRENT_DIRECTORY.resolve("font"));
+        font = tryLoadLocalizedFont(Metadata.HMCL_LOCAL_HOME.resolve("font"));
         if (font != null)
             return font;
 
-        font = tryLoadLocalizedFont(Metadata.HMCL_GLOBAL_DIRECTORY.resolve("font"));
+        font = tryLoadLocalizedFont(Metadata.HMCL_USER_HOME.resolve("font"));
         if (font != null)
             return font;
 
         // Legacy
 
-        font = tryLoadDefaultFont(Metadata.HMCL_CURRENT_DIRECTORY);
+        font = tryLoadDefaultFont(Metadata.HMCL_LOCAL_HOME);
         if (font != null)
             return font;
 
@@ -73,7 +59,7 @@ public final class FontManager {
         if (font != null)
             return font;
 
-        font = tryLoadDefaultFont(Metadata.HMCL_GLOBAL_DIRECTORY);
+        font = tryLoadDefaultFont(Metadata.HMCL_USER_HOME);
         if (font != null)
             return font;
 
@@ -94,31 +80,26 @@ public final class FontManager {
             return null;
     });
 
-    private static final ObjectProperty<FontReference> fontProperty;
+    private static final ObjectProperty<FontReference> font = new SimpleObjectProperty<>();
 
     static {
-        String fontFamily = config().getLauncherFontFamily();
+        updateFont();
+        LOG.info("Font: " + (font.get() != null ? font.get().family() : "System"));
+    }
+
+    private static void updateFont() {
+        String fontFamily = settings().launcherFontFamilyProperty().get();
         if (fontFamily == null)
             fontFamily = System.getProperty("hmcl.font.override");
         if (fontFamily == null)
             fontFamily = System.getenv("HMCL_FONT");
 
-        FontReference fontReference;
         if (fontFamily == null) {
             Font defaultFont = DEFAULT_FONT.get();
-            fontReference = defaultFont != null ? new FontReference(defaultFont) : null;
-        } else
-            fontReference = new FontReference(fontFamily);
-
-        fontProperty = new SimpleObjectProperty<>(fontReference);
-
-        LOG.info("Font: " + (fontReference != null ? fontReference.getFamily() : "System"));
-        fontProperty.addListener((obs, oldValue, newValue) -> {
-            if (newValue != null)
-                config().setLauncherFontFamily(newValue.getFamily());
-            else
-                config().setLauncherFontFamily(null);
-        });
+            font.set(defaultFont != null ? new FontReference(defaultFont) : null);
+        } else {
+            font.set(new FontReference(fontFamily));
+        }
     }
 
     private static Font tryLoadDefaultFont(Path dir) {
@@ -231,64 +212,35 @@ public final class FontManager {
         }
     }
 
-    public static ObjectProperty<FontReference> fontProperty() {
-        return fontProperty;
+    public static ReadOnlyObjectProperty<FontReference> fontProperty() {
+        return font;
     }
 
     public static FontReference getFont() {
-        return fontProperty.get();
-    }
-
-    public static void setFont(FontReference font) {
-        fontProperty.set(font);
+        return font.get();
     }
 
     public static void setFontFamily(String fontFamily) {
-        setFont(fontFamily != null ? new FontReference(fontFamily) : null);
+        settings().launcherFontFamilyProperty().set(fontFamily);
+        updateFont();
     }
 
     // https://github.com/HMCL-dev/HMCL/issues/4072
-    public static final class FontReference {
-        private final @NotNull String family;
-        private final @Nullable String style;
+    public record FontReference(@NotNull String family, @Nullable String style) {
+        public FontReference {
+            Objects.requireNonNull(family);
+        }
 
         public FontReference(@NotNull String family) {
-            this.family = Objects.requireNonNull(family);
-            this.style = null;
+            this(family, null);
         }
 
         public FontReference(@NotNull Font font) {
-            this.family = font.getFamily();
-            this.style = font.getStyle();
-        }
-
-        public @NotNull String getFamily() {
-            return family;
-        }
-
-        public @Nullable String getStyle() {
-            return style;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (!(o instanceof FontReference))
-                return false;
-            FontReference that = (FontReference) o;
-            return Objects.equals(family, that.family) && Objects.equals(style, that.style);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(family, style);
-        }
-
-        @Override
-        public String toString() {
-            return String.format("FontReference[family='%s', style='%s']", family, style);
+            this(font.getFamily(), font.getStyle());
         }
     }
 
     private FontManager() {
     }
 }
+

@@ -1,23 +1,9 @@
-/*
- * Hello Minecraft! Launcher
- * Copyright (C) 2020  huangyuhui <huanghongxun2008@126.com> and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-FileCopyrightText: Copyright (C) 2020 The HMCL Authors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH AdditionRef-HMCL
 package org.jackhuang.hmcl.setting;
 
 import javafx.beans.InvalidationListener;
+import org.jackhuang.hmcl.task.FetchTask;
 import org.jackhuang.hmcl.util.StringUtils;
 import org.jackhuang.hmcl.util.io.NetworkUtils;
 import org.jetbrains.annotations.NotNull;
@@ -26,8 +12,9 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.net.*;
 import java.util.List;
+import java.util.Objects;
 
-import static org.jackhuang.hmcl.setting.ConfigHolder.config;
+import static org.jackhuang.hmcl.setting.SettingsManager.settings;
 import static org.jackhuang.hmcl.util.logging.Logger.LOG;
 
 public final class ProxyManager {
@@ -46,38 +33,46 @@ public final class ProxyManager {
     private static volatile @Nullable SimpleAuthenticator defaultAuthenticator = null;
 
     private static ProxySelector getProxySelector() {
-        if (config().hasProxy()) {
-            Proxy.Type proxyType = config().getProxyType();
-            String host = config().getProxyHost();
-            int port = config().getProxyPort();
+        ProxyType proxyType = settings().proxyTypeProperty().get();
+        return switch (proxyType) {
+            case SYSTEM -> ProxyManager.SYSTEM_DEFAULT;
+            case DIRECT -> NO_PROXY;
+            case HTTP, SOCKS -> {
+                String host = settings().proxyHostProperty().get();
+                int port = settings().proxyPortProperty().get();
 
-            if (proxyType == Proxy.Type.DIRECT || StringUtils.isBlank(host)) {
-                return NO_PROXY;
-            } else if (port < 0 || port > 0xFFFF) {
-                LOG.warning("Illegal proxy port: " + port);
-                return NO_PROXY;
-            } else {
-                return new ProxySelectorWrapper(new SimpleProxySelector(new Proxy(proxyType, new InetSocketAddress(host, port))));
+                if (StringUtils.isBlank(host)) {
+                    yield NO_PROXY;
+                } else if (port < 0 || port > 0xFFFF) {
+                    LOG.warning("Illegal proxy port: " + port);
+                    yield NO_PROXY;
+                } else {
+                    yield new ProxySelectorWrapper(new SimpleProxySelector(new Proxy(
+                            Objects.requireNonNull(proxyType.jdkType()),
+                            new InetSocketAddress(host, port))));
+                }
             }
-        } else {
-            return ProxyManager.SYSTEM_DEFAULT;
-        }
+        };
     }
 
     private static SimpleAuthenticator getAuthenticator() {
-        if (config().hasProxy() && config().hasProxyAuth()) {
-            String username = config().getProxyUser();
-            String password = config().getProxyPass();
+        if (settings().proxyTypeProperty().get().usesCustomAddress() && settings().hasProxyAuthProperty().get()) {
+            String username = settings().proxyUserProperty().get();
+            String password = settings().proxyPasswordProperty().get();
 
             if (username != null || password != null)
-                return new SimpleAuthenticator(username, password.toCharArray());
+                return new SimpleAuthenticator(
+                        Objects.requireNonNullElse(username, ""),
+                        Objects.requireNonNullElse(password, "").toCharArray()
+                );
             else
                 return null;
         } else
             return null;
     }
 
-    static void init() {
+    /// Installs proxy and authentication handlers backed by launcher settings.
+    public static void init() {
         ProxySelector.setDefault(new ProxySelector() {
             @Override
             public List<Proxy> select(URI uri) {
@@ -99,17 +94,18 @@ public final class ProxyManager {
 
         defaultProxySelector = getProxySelector();
         InvalidationListener updateProxySelector = observable -> defaultProxySelector = getProxySelector();
-        config().proxyTypeProperty().addListener(updateProxySelector);
-        config().proxyHostProperty().addListener(updateProxySelector);
-        config().proxyPortProperty().addListener(updateProxySelector);
-        config().hasProxyProperty().addListener(updateProxySelector);
+        settings().proxyTypeProperty().addListener(updateProxySelector);
+        settings().proxyHostProperty().addListener(updateProxySelector);
+        settings().proxyPortProperty().addListener(updateProxySelector);
 
         defaultAuthenticator = getAuthenticator();
         InvalidationListener updateAuthenticator = observable -> defaultAuthenticator = getAuthenticator();
-        config().hasProxyProperty().addListener(updateAuthenticator);
-        config().hasProxyAuthProperty().addListener(updateAuthenticator);
-        config().proxyUserProperty().addListener(updateAuthenticator);
-        config().proxyPassProperty().addListener(updateAuthenticator);
+        settings().proxyTypeProperty().addListener(updateAuthenticator);
+        settings().hasProxyAuthProperty().addListener(updateAuthenticator);
+        settings().proxyUserProperty().addListener(updateAuthenticator);
+        settings().proxyPasswordProperty().addListener(updateAuthenticator);
+
+        FetchTask.notifyInitialized();
     }
 
     private static abstract class AbstractProxySelector extends ProxySelector {

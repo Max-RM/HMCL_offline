@@ -1,23 +1,10 @@
-/*
- * Hello Minecraft! Launcher
- * Copyright (C) 2025 huangyuhui <huanghongxun2008@126.com> and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-FileCopyrightText: Copyright (C) 2025 The HMCL Authors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH AdditionRef-HMCL
 package org.jackhuang.hmcl.util.i18n;
 
 import org.jackhuang.hmcl.download.game.GameRemoteVersion;
+import org.jackhuang.hmcl.util.StringUtils;
+import org.jackhuang.hmcl.util.i18n.translator.Translator_lzh;
 import org.jackhuang.hmcl.util.versioning.GameVersionNumber;
 
 import java.util.Locale;
@@ -27,8 +14,8 @@ public final class MinecraftWiki {
 
     private static final Pattern SNAPSHOT_PATTERN = Pattern.compile("^[0-9]{2}w[0-9]{2}.+$");
 
-    public static String getWikiLink(Locales.SupportedLocale locale, GameRemoteVersion version) {
-        String wikiVersion = version.getSelfVersion();
+    public static String getWikiLink(SupportedLocale locale, GameRemoteVersion version) {
+        String wikiVersion = StringUtils.removeSuffix(version.getSelfVersion(), "_unobfuscated");
         var gameVersion = GameVersionNumber.asGameVersion(wikiVersion);
 
         if (locale.getLocale().getLanguage().equals("lzh")) {
@@ -36,12 +23,12 @@ public final class MinecraftWiki {
             if (wikiVersion.startsWith("2.0"))
                 translatedVersion = "二點〇";
             else if (wikiVersion.startsWith("1.0.0-rc2"))
-                translatedVersion = WenyanUtils.translateGameVersion(GameVersionNumber.asGameVersion("1.0.0-rc2"));
+                translatedVersion = Translator_lzh.translateGameVersion(GameVersionNumber.asGameVersion("1.0.0-rc2"));
             else
-                translatedVersion = WenyanUtils.translateGameVersion(gameVersion);
+                translatedVersion = Translator_lzh.translateGameVersion(gameVersion);
 
             if (translatedVersion.equals(gameVersion.toString()) || gameVersion instanceof GameVersionNumber.Old) {
-                return getWikiLink(Locales.ZH_HANT, version);
+                return getWikiLink(SupportedLocale.getLocale(LocaleUtils.LOCALE_ZH_HANT), version);
             } else if (SNAPSHOT_PATTERN.matcher(wikiVersion).matches()) {
                 return locale.i18n("wiki.version.game.snapshot", translatedVersion);
             } else {
@@ -70,7 +57,7 @@ public final class MinecraftWiki {
                 else if (wikiVersion.startsWith("1.0.0-rc2"))
                     wikiVersion = "1.0.0-rc2";
             }
-        } else if (gameVersion instanceof GameVersionNumber.Snapshot) {
+        } else if (gameVersion instanceof GameVersionNumber.LegacySnapshot) {
             return locale.i18n("wiki.version.game.snapshot", wikiVersion) + variantSuffix;
         } else {
             if (wikiVersion.length() >= 6 && wikiVersion.charAt(2) == 'w') {

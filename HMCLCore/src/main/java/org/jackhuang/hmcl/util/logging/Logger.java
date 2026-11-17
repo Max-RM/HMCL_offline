@@ -1,20 +1,5 @@
-/*
- * Hello Minecraft! Launcher
- * Copyright (C) 2025 huangyuhui <huanghongxun2008@126.com> and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-FileCopyrightText: Copyright (C) 2025 The HMCL Authors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH AdditionRef-HMCL
 package org.jackhuang.hmcl.util.logging;
 
 import org.jetbrains.annotations.NotNull;
@@ -23,7 +8,11 @@ import org.tukaani.xz.LZMA2Options;
 import org.tukaani.xz.XZOutputStream;
 
 import java.io.*;
-import java.nio.file.*;
+import java.lang.System.Logger.Level;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -46,6 +35,9 @@ public final class Logger {
     private static volatile String[] accessTokens = new String[0];
 
     public static synchronized void registerAccessToken(String token) {
+        if (token == null || token.length() <= 1)
+            return;
+
         final String[] oldAccessTokens = accessTokens;
         final String[] newAccessTokens = Arrays.copyOf(oldAccessTokens, oldAccessTokens.length + 1);
 
@@ -63,7 +55,7 @@ public final class Logger {
     static final String PACKAGE_PREFIX = "org.jackhuang.hmcl.";
     static final String CLASS_NAME = Logger.class.getName();
 
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
+    public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
 
     private final BlockingQueue<LogEvent> queue = new LinkedBlockingQueue<>();
     private final StringBuilder builder = new StringBuilder(512);
@@ -86,26 +78,26 @@ public final class Logger {
         StringBuilder builder = this.builder;
         builder.setLength(0);
         builder.append('[');
-        TIME_FORMATTER.formatTo(Instant.ofEpochMilli(event.time), builder);
+        TIME_FORMATTER.formatTo(Instant.ofEpochMilli(event.time()), builder);
         builder.append("] [");
 
-        if (event.caller != null && event.caller.startsWith(PACKAGE_PREFIX)) {
-            builder.append("@.").append(event.caller, PACKAGE_PREFIX.length(), event.caller.length());
+        if (event.caller() != null && event.caller().startsWith(PACKAGE_PREFIX)) {
+            builder.append("@.").append(event.caller(), PACKAGE_PREFIX.length(), event.caller().length());
         } else {
-            builder.append(event.caller);
+            builder.append(event.caller());
         }
 
         builder.append('/')
-                .append(event.level)
+                .append(event.level())
                 .append("] ")
-                .append(filterForbiddenToken(event.message));
+                .append(filterForbiddenToken(event.message()));
         return builder.toString();
     }
 
     private void handle(LogEvent event) {
-        if (event instanceof LogEvent.DoLog) {
-            String log = format((LogEvent.DoLog) event);
-            Throwable exception = ((LogEvent.DoLog) event).exception;
+        if (event instanceof LogEvent.DoLog doLog) {
+            String log = format(doLog);
+            Throwable exception = doLog.exception();
 
             System.out.println(log);
             if (exception != null)
@@ -114,8 +106,7 @@ public final class Logger {
             logWriter.println(log);
             if (exception != null)
                 exception.printStackTrace(logWriter);
-        } else if (event instanceof LogEvent.ExportLog) {
-            LogEvent.ExportLog exportEvent = (LogEvent.ExportLog) event;
+        } else if (event instanceof LogEvent.ExportLog exportEvent) {
             logWriter.flush();
             try {
                 if (logFile != null) {
@@ -368,7 +359,9 @@ public final class Logger {
         log(Level.TRACE, CallerFinder.getCaller(), msg, exception);
     }
 
-    private static final class LogFile implements Comparable<LogFile> {
+    private record LogFile(Path file,
+                           int year, int month, int day, int hour, int minute, int second,
+                           int n) implements Comparable<LogFile> {
         private static final Pattern FILE_NAME_PATTERN = Pattern.compile("(?<year>\\d{4})-(?<month>\\d{2})-(?<day>\\d{2})T(?<hour>\\d{2})-(?<minute>\\d{2})-(?<second>\\d{2})(\\.(?<n>\\d+))?\\.log(\\.(gz|xz))?");
 
         private static @Nullable LogFile ofFile(Path file) {
@@ -390,26 +383,6 @@ public final class Logger {
             return new LogFile(file, year, month, day, hour, minute, second, n);
         }
 
-        private final Path file;
-        private final int year;
-        private final int month;
-        private final int day;
-        private final int hour;
-        private final int minute;
-        private final int second;
-        private final int n;
-
-        private LogFile(Path file, int year, int month, int day, int hour, int minute, int second, int n) {
-            this.file = file;
-            this.year = year;
-            this.month = month;
-            this.day = day;
-            this.hour = hour;
-            this.minute = minute;
-            this.second = second;
-            this.n = n;
-        }
-
         @Override
         public int compareTo(@NotNull Logger.LogFile that) {
             if (this.year != that.year) return Integer.compare(this.year, that.year);
@@ -429,7 +402,7 @@ public final class Logger {
 
         @Override
         public boolean equals(Object obj) {
-            return obj instanceof LogFile && compareTo((LogFile) obj) == 0;
+            return obj instanceof LogFile that && compareTo(that) == 0;
         }
     }
 }

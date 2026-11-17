@@ -1,38 +1,25 @@
-/*
- * Hello Minecraft! Launcher
- * Copyright (C) 2020  huangyuhui <huanghongxun2008@126.com> and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-FileCopyrightText: Copyright (C) 2020 The HMCL Authors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH AdditionRef-HMCL
 package org.jackhuang.hmcl.game;
 
 import org.jackhuang.hmcl.Metadata;
 import org.jackhuang.hmcl.auth.AuthInfo;
 import org.jackhuang.hmcl.launch.DefaultLauncher;
 import org.jackhuang.hmcl.launch.ProcessListener;
+import org.jackhuang.hmcl.util.NativePatcher;
 import org.jackhuang.hmcl.util.i18n.LocaleUtils;
 import org.jackhuang.hmcl.util.io.FileUtils;
+import org.jackhuang.hmcl.util.io.JarUtils;
+import org.jackhuang.hmcl.util.platform.CommandBuilder;
 import org.jackhuang.hmcl.util.platform.ManagedProcess;
 import org.jackhuang.hmcl.util.versioning.GameVersionNumber;
 
-import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Stream;
 
-import static org.jackhuang.hmcl.setting.ConfigHolder.config;
 import static org.jackhuang.hmcl.util.logging.Logger.LOG;
 
 /**
@@ -40,16 +27,27 @@ import static org.jackhuang.hmcl.util.logging.Logger.LOG;
  */
 public final class HMCLGameLauncher extends DefaultLauncher {
 
-    public HMCLGameLauncher(GameRepository repository, Version version, AuthInfo authInfo, LaunchOptions options) {
-        this(repository, version, authInfo, options, null);
+    /// Creates a launcher with daemon process monitors.
+    ///
+    /// @param instance the instance being launched
+    /// @param manifest the effective launch-time manifest
+    /// @param authInfo authentication information for the game process
+    /// @param options  launch options
+    /// @param listener process listener, or `null` to inherit IO
+    public HMCLGameLauncher(GameInstance instance, GameInstanceManifest manifest, AuthInfo authInfo, LaunchOptions options, ProcessListener listener) {
+        this(instance, manifest, authInfo, options, listener, true);
     }
 
-    public HMCLGameLauncher(GameRepository repository, Version version, AuthInfo authInfo, LaunchOptions options, ProcessListener listener) {
-        this(repository, version, authInfo, options, listener, true);
-    }
-
-    public HMCLGameLauncher(GameRepository repository, Version version, AuthInfo authInfo, LaunchOptions options, ProcessListener listener, boolean daemon) {
-        super(repository, version, authInfo, options, listener, daemon);
+    /// Creates a launcher for the given instance and launch plan.
+    ///
+    /// @param instance the instance being launched
+    /// @param manifest the effective launch-time manifest
+    /// @param authInfo authentication information for the game process
+    /// @param options  launch options
+    /// @param listener process listener, or `null` to inherit IO
+    /// @param daemon   whether monitors should be daemon threads
+    public HMCLGameLauncher(GameInstance instance, GameInstanceManifest manifest, AuthInfo authInfo, LaunchOptions options, ProcessListener listener, boolean daemon) {
+        super(instance, manifest, authInfo, options, listener, daemon);
     }
 
     @Override
@@ -61,10 +59,10 @@ public final class HMCLGameLauncher extends DefaultLauncher {
     }
 
     private void generateOptionsTxt() {
-        if (config().isDisableAutoGameOptions())
+        if (options.isDisableAutoGameOptions())
             return;
 
-        Path runDir = repository.getRunDirectory(version.getId()).toPath();
+        Path runDir = instance.getRunDirectory();
         Path optionsFile = runDir.resolve("options.txt");
         Path configFolder = runDir.resolve("config");
 
@@ -81,8 +79,6 @@ public final class HMCLGameLauncher extends DefaultLauncher {
         }
 
         Locale locale = Locale.getDefault();
-        if (LocaleUtils.isEnglish(locale))
-            return;
 
         /*
          *  1.0         : No language option, do not set for these versions
@@ -91,8 +87,14 @@ public final class HMCLGameLauncher extends DefaultLauncher {
          *  1.11 ~ 1.12 : zh_cn works fine, zh_CN will display Chinese but the language setting will incorrectly show English as selected
          *  1.13+       : zh_cn works fine, zh_CN will automatically switch to English
          */
-        GameVersionNumber gameVersion = GameVersionNumber.asGameVersion(repository.getGameVersion(version));
-        if (gameVersion.compareTo("1.1") < 0)
+        GameVersionNumber gameVersion = instance.getVersion();
+        if (gameVersion == GameVersionNumber.unknown() || gameVersion.compareTo("1.1") < 0)
+            return;
+
+        // These snapshots lack the external language resources needed for non-English locales.
+        // Selecting an unavailable language causes a NullPointerException during startup.
+        if (gameVersion instanceof GameVersionNumber.LegacySnapshot
+                && gameVersion.compareTo("13w16a") >= 0 && gameVersion.compareTo("13w23b") <= 0)
             return;
 
         String lang = normalizedLanguageTag(locale, gameVersion);
@@ -111,36 +113,35 @@ public final class HMCLGameLauncher extends DefaultLauncher {
     }
 
     private static String normalizedLanguageTag(Locale locale, GameVersionNumber gameVersion) {
-        String language = locale.getLanguage();
         String region = locale.getCountry();
 
-        switch (language) {
-            case "ru":
-                return "ru_RU";
-            case "uk":
-                return "uk_UA";
-            case "es":
-                return "es_ES";
-            case "ja":
-                return "ja_JP";
-            case "lzh":
-                return gameVersion.compareTo("1.16") >= 0
-                        ? "lzh"
-                        : "";
-            case "zh":
-            default:
-                if (LocaleUtils.isChinese(locale)) {
-                    String script = LocaleUtils.getScript(locale);
-                    if ("Hant".equals(script)) {
-                        if ((region.equals("HK") || region.equals("MO") && gameVersion.compareTo("1.16") >= 0))
-                            return "zh_HK";
-                        return "zh_TW";
-                    }
-                    return "zh_CN";
+        return switch (LocaleUtils.getRootLanguage(locale)) {
+            case "ar" -> "ar_SA";
+            case "es" -> "es_ES";
+            case "ja" -> "ja_JP";
+            case "ru" -> "ru_RU";
+            case "uk" -> "uk_UA";
+            case "zh" -> {
+                if ("lzh".equals(locale.getLanguage()) && gameVersion.compareTo("1.16") >= 0)
+                    yield "lzh";
+
+                String script = LocaleUtils.getScript(locale);
+                if ("Hant".equals(script)) {
+                    if ((region.equals("HK") || region.equals("MO") && gameVersion.compareTo("1.16") >= 0))
+                        yield "zh_HK";
+                    yield "zh_TW";
+                }
+                yield "zh_CN";
+            }
+            case "en" -> {
+                if ("Qabs".equals(LocaleUtils.getScript(locale)) && gameVersion.compareTo("1.16") >= 0) {
+                    yield "en_UD";
                 }
 
-                return "";
-        }
+                yield "";
+            }
+            default -> "";
+        };
     }
 
     @Override
@@ -150,8 +151,64 @@ public final class HMCLGameLauncher extends DefaultLauncher {
     }
 
     @Override
-    public void makeLaunchScript(File scriptFile) throws IOException {
+    public void makeLaunchScript(Path scriptFile) throws IOException {
         generateOptionsTxt();
         super.makeLaunchScript(scriptFile);
     }
+
+    @Override
+    protected void appendJvmArgs(CommandBuilder result) {
+        super.appendJvmArgs(result);
+
+        if (options.isAllowAutoAgent()
+                && !options.isNoGeneratedJVMArgs()
+                && !options.isNoGeneratedOptimizingJVMArgs()
+                && NativePatcher.needPatchMemoryUtil(manifest, options.getJava().getParsedVersion())) {
+            LOG.info("Attempting to patch game with lwjgl-unsafe-agent");
+            try {
+                result.add("-javaagent:" + extractLwjglUnsafeAgent());
+            } catch (Exception e) {
+                LOG.warning("Failed to extract lwjgl-unsafe-agent", e);
+            }
+        }
+    }
+
+    private Path extractLwjglUnsafeAgent() throws IOException {
+        String agentVersion = JarUtils.getAttribute("hmcl.lwjgl-unsafe-agent.version", null);
+        if (agentVersion == null) {
+            throw new IOException("Missing hmcl.lwjgl-unsafe-agent.version attribute");
+        }
+
+        Library library = new Library(new Artifact("org.glavo", "lwjgl-unsafe-agent", agentVersion));
+        String fileName = library.artifact().getFileName();
+
+        Path agentPath = instance.getLayout().getLibraryFile(instance.getId(), library).toAbsolutePath().normalize();
+        if (agentPath.toString().contains("=")) {
+            throw new IOException("Invalid library path: " + agentPath);
+        }
+
+        byte[] bytes;
+        try (InputStream input = DefaultLauncher.class.getResourceAsStream("/assets/" + fileName)) {
+            if (input == null) {
+                throw new IOException("/assets/" + fileName + " not found");
+            }
+
+            bytes = input.readAllBytes();
+        }
+
+        if (Files.isRegularFile(agentPath)) {
+            try {
+                if (Files.size(agentPath) == bytes.length) {
+                    return agentPath;
+                }
+            } catch (IOException e) {
+                LOG.warning("Failed to check size of " + agentPath, e);
+            }
+        }
+
+        Files.createDirectories(agentPath.getParent());
+        FileUtils.saveSafely(agentPath, output -> output.write(bytes));
+        return agentPath;
+    }
+
 }

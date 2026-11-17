@@ -12,4 +12,6 @@ This is a minimal change that solves the problem - now the Offline option is alw
 Comparison of differences:
 https://github.com/HMCL-dev/HMCL/commit/32b7a60d2ae18c8c416db3ee7d8f8e74eed72205
 
+Sync status: merged with upstream `main` at commit `bf558a882` (2026-11-16), the offline account unlock is preserved.
+
 (There is no guarantee that this branch will be updated in the future).
