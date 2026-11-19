@@ -97,15 +97,6 @@ public final class UserState extends ObservableSetting implements JsonSchemaSett
         this.backupOnNextSave = backupOnNextSave;
     }
 
-    /// The accepted launcher agreement version.
-    @SerializedName("agreementVersion")
-    private final IntegerProperty agreementVersion = new SimpleIntegerProperty();
-
-    /// Returns the accepted launcher agreement version property.
-    public IntegerProperty agreementVersionProperty() {
-        return agreementVersion;
-    }
-
     /// The accepted Terracotta agreement version.
     @SerializedName("terracottaAgreementVersion")
     private final IntegerProperty terracottaAgreementVersion = new SimpleIntegerProperty();

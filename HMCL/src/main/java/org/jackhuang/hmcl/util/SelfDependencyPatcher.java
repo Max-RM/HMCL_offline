@@ -401,6 +401,10 @@ public final class SelfDependencyPatcher {
         private final JButton btnCancel;
 
         public SwingProgressFrame(String title) {
+            // The progress dialog is centered on the screen, so the always-on-top splash window
+            // has to be closed to avoid covering it.
+            SplashWindow.close();
+
             JPanel panel = new JPanel();
 
             setResizable(false);

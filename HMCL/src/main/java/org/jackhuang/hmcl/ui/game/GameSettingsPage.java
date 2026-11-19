@@ -6,6 +6,7 @@ import com.jfoenix.controls.JFXButton;
 import com.jfoenix.controls.JFXComboBox;
 import com.jfoenix.controls.JFXSlider;
 import com.jfoenix.controls.JFXTextField;
+import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.Property;
@@ -26,6 +27,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Screen;
+import org.jackhuang.hmcl.Metadata;
 import org.jackhuang.hmcl.game.*;
 import org.jackhuang.hmcl.java.JavaManager;
 import org.jackhuang.hmcl.java.JavaRuntime;
@@ -37,8 +39,10 @@ import org.jackhuang.hmcl.ui.construct.*;
 import org.jackhuang.hmcl.ui.decorator.DecoratorPage;
 import org.jackhuang.hmcl.ui.instances.GameInstanceIconDialog;
 import org.jackhuang.hmcl.ui.instances.GameInstancePage;
+import org.jackhuang.hmcl.util.FileSaver;
 import org.jackhuang.hmcl.util.Holder;
 import org.jackhuang.hmcl.util.Pair;
+import org.jackhuang.hmcl.util.Restarter;
 import org.jackhuang.hmcl.util.ServerAddress;
 import org.jackhuang.hmcl.util.StringUtils;
 import org.jackhuang.hmcl.util.i18n.I18n;
@@ -50,6 +54,8 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnknownNullability;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -58,6 +64,7 @@ import java.util.function.Function;
 
 import static org.jackhuang.hmcl.util.Pair.pair;
 import static org.jackhuang.hmcl.util.i18n.I18n.i18n;
+import static org.jackhuang.hmcl.util.logging.Logger.LOG;
 
 /// @author Glavo
 @NotNullByDefault
@@ -353,6 +360,15 @@ public final class GameSettingsPage<S extends GameSettings> extends StackPane
                 isolationButton.setTitle(i18n("settings.game.isolation"));
                 isolationButton.setSubtitle(i18n("settings.game.isolation.subtitle"));
                 bindInstanceIsolationButton(isolationButton);
+            }
+
+            // Local Root Setting
+            if (isPresetSetting) {
+                var forceLocalRootSwitch = new LineSwitch();
+                gameSettings.getContent().add(forceLocalRootSwitch);
+                forceLocalRootSwitch.setTitle(i18n("settings.force_local_root"));
+                forceLocalRootSwitch.setSubtitle(i18n("settings.force_local_root.subtitle"));
+                bindForceLocalRootSwitch(forceLocalRootSwitch);
             }
 
             // Memory Setting
@@ -1685,6 +1701,73 @@ public final class GameSettingsPage<S extends GameSettings> extends StackPane
             property.addListener(weakRefresh);
             refresh.invalidated(setting);
         }
+    }
+
+    /// Binds the force-local-root switch to the marker file that is read during launcher startup.
+    ///
+    /// Toggling the switch only creates or removes [Metadata#FORCE_LOCAL_ROOT_MARKER]; the forced
+    /// local mode takes effect after the launcher is restarted. Failures are logged and revert the
+    /// switch so it keeps reflecting the actual marker state.
+    private void bindForceLocalRootSwitch(LineSwitch button) {
+        button.setSelected(Files.isRegularFile(Metadata.FORCE_LOCAL_ROOT_MARKER));
+
+        final boolean[] updating = {false};
+        button.selectedProperty().addListener((observable, oldValue, newValue) -> {
+            if (updating[0]) {
+                return;
+            }
+
+            try {
+                if (newValue) {
+                    Files.createDirectories(Metadata.HMCL_LOCAL_HOME);
+                    Files.writeString(Metadata.FORCE_LOCAL_ROOT_MARKER, "");
+                } else {
+                    Files.deleteIfExists(Metadata.FORCE_LOCAL_ROOT_MARKER);
+                }
+            } catch (IOException e) {
+                LOG.warning("Unable to update the force-local-root marker", e);
+                updating[0] = true;
+                try {
+                    button.setSelected(Boolean.TRUE.equals(oldValue));
+                } finally {
+                    updating[0] = false;
+                }
+                return;
+            }
+
+            // The marker is only read at startup, so warn whenever the selected state differs
+            // from the mode the current process is actually using.
+            if (newValue != Metadata.FORCE_LOCAL_ROOT) {
+                showForceLocalRootRestartDialog();
+            }
+        });
+    }
+
+    /// Shows a warning that the force-local-root change only takes effect after a restart.
+    private static void showForceLocalRootRestartDialog() {
+        Controllers.dialog(new MessageDialogPane.Builder(
+                i18n("settings.force_local_root.restart_required"),
+                i18n("message.warning"),
+                MessageDialogPane.MessageType.WARNING)
+                .addAction(i18n("settings.force_local_root.restart_now"), GameSettingsPage::restartLauncher)
+                .addCancel(i18n("settings.force_local_root.restart_later"), null)
+                .build());
+    }
+
+    /// Restarts the launcher so the newly selected force-local-root mode takes effect.
+    private static void restartLauncher() {
+        Controllers.onApplicationStop();
+        try {
+            FileSaver.waitForAllSaves();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            Restarter.restartSelf();
+        } catch (IOException e) {
+            LOG.warning("Failed to restart self", e);
+        }
+        Platform.exit();
     }
 
     /// Binds the instance isolation switch to the current instance setting.

@@ -37,27 +37,71 @@ public final class Metadata {
 
     public static final String PUBLISH_URL = "https://hmcl.huangyuhui.net";
     public static final String REPOSITORY_URL = "https://github.com/HMCL-dev/HMCL";
+
+    /// The source repository of this fork.
+    public static final String FORK_REPOSITORY_URL = "https://github.com/Max-RM/HMCL_offline";
+
     public static final String HMCL_UPDATE_URL = System.getProperty("hmcl.update_source.override", PUBLISH_URL + "/api/update_link");
     public static final String MANUAL_UPDATE_URL = "https://github.com/HMCL-dev/HMCL/releases";
 
     public static final String DOCS_URL = "https://docs.hmcl.net";
     public static final String CONTACT_URL = DOCS_URL + "/help.html";
     public static final String CHANGELOG_URL = DOCS_URL + "/changelog/";
-    public static final String EULA_URL = DOCS_URL + "/eula/hmcl.html";
     public static final String GROUPS_URL = "https://www.bilibili.com/opus/905435541874409529";
 
     public static final String BUILD_CHANNEL = JarUtils.getAttribute("hmcl.version.type", "nightly");
     public static final String GITHUB_SHA = JarUtils.getAttribute("hmcl.version.hash", null);
 
+    /// The absolute working directory of the launcher process, normally the directory containing the launcher jar or executable.
     public static final Path CURRENT_DIRECTORY = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
-    public static final Path MINECRAFT_DIRECTORY = OperatingSystem.getWorkingDirectory("minecraft");
+
+    /// The name of the marker file that enables [#FORCE_LOCAL_ROOT].
+    public static final String FORCE_LOCAL_ROOT_MARKER_NAME = "force-local-root";
+
+    /// The marker file whose presence forces all launcher data into the launcher's own directory.
+    ///
+    /// The marker is read once during class initialization; changing it requires a launcher restart.
+    public static final Path FORCE_LOCAL_ROOT_MARKER;
+
+    /// Whether all launcher data is forced into [CURRENT_DIRECTORY] and [HMCL_LOCAL_HOME].
+    ///
+    /// When enabled, the shared user data directory and the default Minecraft directory are redirected
+    /// away from the user profile so that the launcher does not write to `%APPDATA%` or its Unix equivalents.
+    public static final boolean FORCE_LOCAL_ROOT;
+
+    /// The default Minecraft directory used by the launcher.
+    ///
+    /// This is the user-profile `.minecraft` directory unless [#FORCE_LOCAL_ROOT] is enabled, in which
+    /// case it is `[CURRENT_DIRECTORY]/.minecraft`.
+    public static final Path MINECRAFT_DIRECTORY;
+
+    /// The shared user data directory that stores accounts, user settings and user state.
+    ///
+    /// This is the user-profile HMCL directory unless [#FORCE_LOCAL_ROOT] is enabled, in which case it
+    /// is the same as [HMCL_LOCAL_HOME].
     public static final Path HMCL_USER_HOME;
+
+    /// The per-instance launcher data directory, normally `[CURRENT_DIRECTORY]/.hmcl`.
     public static final Path HMCL_LOCAL_HOME;
+
+    /// The directory that stores launcher dependencies and native libraries.
     public static final Path DEPENDENCIES_DIRECTORY;
 
     static {
+        String hmclCurrentDir = System.getProperty("hmcl.dir", System.getenv("HMCL_LOCAL_HOME"));
+        HMCL_LOCAL_HOME = StringUtils.isNotBlank(hmclCurrentDir)
+                ? Path.of(hmclCurrentDir).toAbsolutePath().normalize()
+                : CURRENT_DIRECTORY.resolve(".hmcl");
+
+        // The marker has to be resolved before the user home and Minecraft directory are computed,
+        // because both must be redirected while those constants are initialized.
+        FORCE_LOCAL_ROOT_MARKER = HMCL_LOCAL_HOME.resolve(FORCE_LOCAL_ROOT_MARKER_NAME);
+        FORCE_LOCAL_ROOT = Files.isRegularFile(FORCE_LOCAL_ROOT_MARKER);
+
         String hmclHome = System.getProperty("hmcl.home", System.getenv("HMCL_USER_HOME"));
-        if (StringUtils.isBlank(hmclHome)) {
+        if (FORCE_LOCAL_ROOT) {
+            HMCL_USER_HOME = HMCL_LOCAL_HOME;
+        } else if (StringUtils.isBlank(hmclHome)) {
             if (OperatingSystem.CURRENT_OS.isLinuxOrBSD()) {
                 String xdgData = System.getenv("XDG_DATA_HOME");
                 if (StringUtils.isNotBlank(xdgData)) {
@@ -72,10 +116,9 @@ public final class Metadata {
             HMCL_USER_HOME = Path.of(hmclHome).toAbsolutePath().normalize();
         }
 
-        String hmclCurrentDir = System.getProperty("hmcl.dir", System.getenv("HMCL_LOCAL_HOME"));
-        HMCL_LOCAL_HOME = StringUtils.isNotBlank(hmclCurrentDir)
-                ? Path.of(hmclCurrentDir).toAbsolutePath().normalize()
-                : CURRENT_DIRECTORY.resolve(".hmcl");
+        MINECRAFT_DIRECTORY = FORCE_LOCAL_ROOT
+                ? CURRENT_DIRECTORY.resolve(".minecraft").toAbsolutePath().normalize()
+                : OperatingSystem.getWorkingDirectory("minecraft");
 
         String hmclDependencies = System.getProperty("hmcl.dependencies.dir", System.getenv("HMCL_DEPENDENCIES_DIR"));
         DEPENDENCIES_DIRECTORY = StringUtils.isNotBlank(hmclDependencies)

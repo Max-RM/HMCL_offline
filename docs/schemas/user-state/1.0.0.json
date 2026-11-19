@@ -15,9 +15,6 @@
     }
   },
   "properties": {
-    "agreementVersion": {
-      "type": "integer"
-    },
     "terracottaAgreementVersion": {
       "type": "integer"
     },

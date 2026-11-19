@@ -28,7 +28,6 @@ public final class UserSettingsTest {
             Path legacyConfig = fileSystem.getPath("/config.json");
             Files.writeString(legacyConfig, """
                     {
-                      "agreementVersion": 1,
                       "terracottaAgreementVersion": 2,
                       "platformPromptVersion": 3,
                       "logRetention": 7,
@@ -50,7 +49,6 @@ public final class UserSettingsTest {
 
             assertEquals(UserSettings.CURRENT_SCHEMA, settings.getSchema());
             assertEquals(UserState.CURRENT_SCHEMA, state.getSchema());
-            assertEquals(1, state.agreementVersionProperty().get());
             assertEquals(2, state.terracottaAgreementVersionProperty().get());
             assertEquals(3, state.platformPromptVersionProperty().get());
             assertEquals(7, settings.logRetentionProperty().get());

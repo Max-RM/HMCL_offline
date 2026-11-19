@@ -230,17 +230,12 @@ public final class AboutPage extends SpinnerPane {
             copyright.setTitle(i18n("about.copyright"));
             copyright.setSubtitle(i18n("about.copyright.statement"));
 
-            var claim = LineButton.createExternalLinkButton(Metadata.EULA_URL);
-            claim.setLargeTitle(true);
-            claim.setTitle(i18n("about.claim"));
-            claim.setSubtitle(i18n("about.claim.statement"));
+            var forkSource = LineButton.createExternalLinkButton(Metadata.FORK_REPOSITORY_URL);
+            forkSource.setLargeTitle(true);
+            forkSource.setTitle(i18n("about.fork_source"));
+            forkSource.setSubtitle(i18n("about.fork_source.statement"));
 
-            var openSource = LineButton.createExternalLinkButton("https://github.com/HMCL-dev/HMCL");
-            openSource.setLargeTitle(true);
-            openSource.setTitle(i18n("about.open_source"));
-            openSource.setSubtitle(i18n("about.open_source.statement"));
-
-            legal.getContent().setAll(copyright, claim, openSource);
+            legal.getContent().setAll(copyright, forkSource);
         }
 
         content.getChildren().setAll(

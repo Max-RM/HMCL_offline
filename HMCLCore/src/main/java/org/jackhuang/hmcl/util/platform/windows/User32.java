@@ -26,6 +26,19 @@ public interface User32 extends StdCallLibrary {
     /// @see <a href="https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getdc">GetDC function</a>
     @Nullable Pointer GetDC(@Nullable Pointer hWnd);
 
+    /// Retrieves the specified system metric or system configuration setting.
+    ///
+    /// @param nIndex the system metric identifier
+    /// @return the requested system metric value
+    /// @see <a href="https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getsystemmetrics">GetSystemMetrics function</a>
+    int GetSystemMetrics(int nIndex);
+
+    /// Retrieves the window handle of the foreground window.
+    ///
+    /// @return the foreground window handle, or `null` when no window has the input focus
+    /// @see <a href="https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getforegroundwindow">GetForegroundWindow function</a>
+    @Nullable Pointer GetForegroundWindow();
+
     /// Releases a device context retrieved by {@link #GetDC(Pointer)}.
     ///
     /// @param hWnd the same window passed to {@link #GetDC(Pointer)}, or `null` for a screen device context

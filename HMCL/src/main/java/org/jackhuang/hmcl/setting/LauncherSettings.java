@@ -229,8 +229,15 @@ public final class LauncherSettings extends ObservableSetting implements JsonSch
 
     /// Resolves the effective common Minecraft directory from the current directory settings.
     ///
+    /// When [Metadata#FORCE_LOCAL_ROOT] is enabled the configured mode and custom path are ignored,
+    /// so downloads, libraries and assets are always cached inside the launcher's own directory.
+    ///
     /// @return the effective directory path, or `null` when the configured mode is not recognized
     public String getResolvedCommonDirectory() {
+        if (Metadata.FORCE_LOCAL_ROOT) {
+            return getDefaultCommonDirectory();
+        }
+
         EnumCommonDirectory type = commonDirectoryType.get();
         String customPath = commonDirectory.get();
 

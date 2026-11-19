@@ -50,6 +50,13 @@ public final class GameDirectoryManager {
     /// The default user-home game directory path.
     private static final PortablePath HOME_GAME_DIRECTORY_PATH = PortablePath.fromPath(Metadata.MINECRAFT_DIRECTORY);
 
+    /// The single local game directory exposed when [Metadata#FORCE_LOCAL_ROOT] is enabled.
+    ///
+    /// It is not stored in either game-directory file, so disabling the forced mode restores the
+    /// user's configured game directories without losing them.
+    private static final GameDirectory FORCED_LOCAL_GAME_DIRECTORY =
+            new GameDirectory(DEFAULT_GAME_DIRECTORY_ID, null, CURRENT_GAME_DIRECTORY_PATH);
+
     /// Prevents instantiation.
     private GameDirectoryManager() {
     }
@@ -232,7 +239,15 @@ public final class GameDirectoryManager {
     }
 
     /// Rebuilds the merged runtime game directory view from the two backing stores.
+    ///
+    /// When [Metadata#FORCE_LOCAL_ROOT] is enabled the view is limited to a single synthetic
+    /// `.minecraft` entry, so the launcher cannot read or write game data outside its own directory.
     private static void rebuildGameDirectories() {
+        if (Metadata.FORCE_LOCAL_ROOT) {
+            mergedGameDirectories.setAll(FORCED_LOCAL_GAME_DIRECTORY);
+            return;
+        }
+
         GameDirectories userGameDirectories = userGameDirectories();
         GameDirectories localGameDirectories = localGameDirectories();
         Map<GameDirectoryID, GameDirectory> visibleGameDirectories = new LinkedHashMap<>();

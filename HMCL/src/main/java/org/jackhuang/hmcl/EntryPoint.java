@@ -4,6 +4,7 @@ package org.jackhuang.hmcl;
 
 import org.jackhuang.hmcl.util.FileSaver;
 import org.jackhuang.hmcl.util.SelfDependencyPatcher;
+import org.jackhuang.hmcl.util.SplashWindow;
 import org.jackhuang.hmcl.util.SwingUtils;
 import org.jackhuang.hmcl.java.JavaRuntime;
 import org.jackhuang.hmcl.util.io.FileUtils;
@@ -30,6 +31,10 @@ public final class EntryPoint {
 
     /// Initializes TLS protection before downloading dependencies and starting the launcher.
     public static void main(String[] args) {
+        // The startup splash window is temporarily disabled until it can be verified
+        // on low-DPI touch devices. Re-enable this call to show it again.
+        // SplashWindow.show();
+
         System.getProperties().putIfAbsent("java.net.useSystemProxies", "true");
         System.getProperties().putIfAbsent("javafx.autoproxy.disable", "true");
         System.getProperties().putIfAbsent("http.agent", "HMCL/" + Metadata.VERSION);
@@ -55,6 +60,7 @@ public final class EntryPoint {
     }
 
     public static void exit(int exitCode) {
+        SplashWindow.close();
         FileSaver.shutdown();
         LOG.shutdown();
         System.exit(exitCode);
@@ -188,6 +194,7 @@ public final class EntryPoint {
     }
 
     static void showWarning(String message) {
+        SplashWindow.close();
         SwingUtils.initLookAndFeel();
 
         int result = JOptionPane.showOptionDialog(null, message, i18n("message.warning"), JOptionPane.OK_CANCEL_OPTION,
@@ -202,6 +209,7 @@ public final class EntryPoint {
      * Indicates that a fatal error has occurred, and that the application cannot start.
      */
     static void showErrorAndExit(String message) {
+        SplashWindow.close();
         SwingUtils.showErrorDialog(message);
         exit(1);
     }

@@ -101,15 +101,19 @@ public final class Launcher extends Application {
             if (OperatingSystem.CURRENT_OS == OperatingSystem.MACOS
                     && SettingsManager.isNewlyCreated()
                     && System.getProperty("user.dir").startsWith("/private/var/folders/")) {
-                if (!confirmWithCountdown(AlertType.WARNING, i18n("fatal.mac_app_translocation"), 5))
+                if (!confirmWithCountdown(AlertType.WARNING, i18n("fatal.mac_app_translocation"), 5)) {
+                    SplashWindow.close();
                     return;
+                }
             } else {
                 checkConfigInTempDir();
             }
 
             if (SettingsManager.isOwnerChanged()) {
-                if (showAlert(AlertType.WARNING, i18n("fatal.config_change_owner_root"), ButtonType.YES, ButtonType.NO) == ButtonType.NO)
+                if (showAlert(AlertType.WARNING, i18n("fatal.config_change_owner_root"), ButtonType.YES, ButtonType.NO) == ButtonType.NO) {
+                    SplashWindow.close();
                     return;
+                }
             }
 
             if (SettingsManager.hasReadOnlyCoreSettings()) {
@@ -130,8 +134,11 @@ public final class Launcher extends Application {
                 UpdateChecker.init();
 
                 primaryStage.show();
+
+                SplashWindow.close();
             });
         } catch (Throwable e) {
+            SplashWindow.close();
             CRASH_REPORTER.uncaughtException(Thread.currentThread(), e);
         }
     }
@@ -189,10 +196,12 @@ public final class Launcher extends Application {
     }
 
     private static ButtonType showAlert(AlertType alertType, String contentText, ButtonType... buttons) {
+        SplashWindow.close();
         return new Alert(alertType, contentText, buttons).showAndWait().orElse(null);
     }
 
     private static boolean confirmWithCountdown(Alert.AlertType alertType, String contentText, int seconds) {
+        SplashWindow.close();
         Alert alert = new Alert(alertType, contentText, ButtonType.YES, ButtonType.NO);
         Button okButton = (Button) alert.getDialogPane().lookupButton(ButtonType.YES);
 
@@ -266,6 +275,7 @@ public final class Launcher extends Application {
 
     public static void main(String[] args) {
         if (UpdateHandler.processArguments(args)) {
+            SplashWindow.close();
             LOG.shutdown();
             return;
         }
@@ -336,10 +346,12 @@ public final class Launcher extends Application {
             }
 
             setupJavaFXVMOptions();
+            SplashWindow.setStatus(i18n("launcher.starting"));
             setupWindowsAppUserModelID();
 
             launch(Launcher.class, args);
         } catch (Throwable e) { // Fucking JavaFX will suppress the exception and will break our crash reporter.
+            SplashWindow.close();
             CRASH_REPORTER.uncaughtException(Thread.currentThread(), e);
         }
     }
