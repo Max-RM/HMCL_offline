@@ -71,9 +71,19 @@ language-subtag-registry
 /hmcl.json
 /.hmcl.json
 /.hmcl/
+/TMP
+/ETC
 
 # AI
 /.gemini/
 !/.gemini/config.yaml
 .codex
 /.gradle-*/
+
+# build scripts: machine-specific overrides (Gradle cache, mirror, JVM options)
+/scripts/local.settings.ps1
+# build scripts: remembered Gradle installation path
+/scripts/gradle-path.txt
+
+# artifacts copied by scripts/Build-HMCL.ps1
+/Publish/

@@ -38,6 +38,7 @@ Jenkinsfile   text eol=lf
 
 # Windows batch files must keep CRLF so cmd.exe can parse them.
 *.bat         text eol=crlf
+*.cmd         text eol=crlf
 
 # ─── Binary files ─────────────────────────────────────────────────────────────
 # Raster / animated images
