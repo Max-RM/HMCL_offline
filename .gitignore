@@ -87,3 +87,6 @@ language-subtag-registry
 
 # artifacts copied by scripts/Build-HMCL.ps1
 /Publish/
+
+# Kotlin
+.kotlin

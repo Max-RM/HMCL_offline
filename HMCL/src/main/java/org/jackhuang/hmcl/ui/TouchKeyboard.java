@@ -13,6 +13,7 @@ import javafx.scene.control.TextInputControl;
 import javafx.scene.input.MouseEvent;
 import org.jackhuang.hmcl.util.Lang;
 import org.jackhuang.hmcl.util.platform.OperatingSystem;
+import org.jackhuang.hmcl.util.platform.SystemInfo;
 import org.jackhuang.hmcl.util.platform.windows.Ole32;
 import org.jackhuang.hmcl.util.platform.windows.User32;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -231,7 +232,7 @@ public final class TouchKeyboard {
     ///
     /// @return `true` when the touch keyboard should be integrated
     private static boolean isSupported() {
-        if (OperatingSystem.CURRENT_OS != OperatingSystem.WINDOWS) {
+        if (SystemInfo.CURRENT_OS != OperatingSystem.WINDOWS) {
             return false;
         }
 
