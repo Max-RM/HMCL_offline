@@ -60,15 +60,58 @@ param(
 . (Join-Path $PSScriptRoot "_Common.ps1")
 . (Join-Path $PSScriptRoot "_ExeVersion.ps1")
 
-# Returns the jar/exe/sh artifacts produced by the build, sorted by name.
+# Reads the version of the artifacts that the build has just produced. It comes from the
+# manifest of the newest jar, because Gradle derives it from config/project.properties and
+# the VERSION_ROOT / BUILD_NUMBER / VERSION_TYPE environment variables.
+#
+# Returns an empty string when no jar with an Implementation-Version is present.
+function Get-BuildVersion {
+    $jars = @(Get-ChildItem -LiteralPath $Script:LibsDirectory -File -Filter "HMCL-*.jar" -ErrorAction SilentlyContinue |
+        Sort-Object -Property LastWriteTime -Descending)
+
+    foreach ($jar in $jars) {
+        $jarVersion = Get-JarVersion -JarPath $jar.FullName
+        if (-not [string]::IsNullOrWhiteSpace($jarVersion)) {
+            return $jarVersion
+        }
+    }
+
+    return ""
+}
+
+# Returns the jar/exe/sh artifacts of the given version, sorted by name.
+# Files from earlier builds stay in build\libs, so they are filtered out here; otherwise
+# an older release would be copied to Publish next to the new one.
 function Get-BuiltArtifacts {
+    param([Parameter(Mandatory = $true)][string]$Version)
+
     if (-not (Test-Path -LiteralPath $Script:LibsDirectory)) {
         return @()
     }
 
+    $pattern = '^HMCL-' + [regex]::Escape($Version) + '\.(jar|exe|sh)$'
+
     return @(Get-ChildItem -LiteralPath $Script:LibsDirectory -File |
-        Where-Object { $_.Extension -in @(".jar", ".exe", ".sh") } |
+        Where-Object { $_.Name -match $pattern } |
         Sort-Object -Property Name)
+}
+
+# Prints a warning for every artifact of another version left in build\libs, so a stale
+# file cannot be mistaken for a result of this build.
+function Show-StaleArtifacts {
+    param([Parameter(Mandatory = $true)][string]$Version)
+
+    if (-not (Test-Path -LiteralPath $Script:LibsDirectory)) {
+        return
+    }
+
+    $pattern = '^HMCL-' + [regex]::Escape($Version) + '\.'
+    $stale = @(Get-ChildItem -LiteralPath $Script:LibsDirectory -File |
+        Where-Object { $_.Extension -in @(".jar", ".exe", ".sh") -and $_.Name -notmatch $pattern })
+
+    foreach ($file in $stale) {
+        Write-Warn "Ignoring $($file.Name): it belongs to another version. Pass -Clean to remove stale files."
+    }
 }
 
 # Prints the produced artifacts with their sizes so the result is easy to find.
@@ -151,8 +194,14 @@ try {
     Write-Step "=== Building HMCL (jar, exe, sh) ==="
     Invoke-Gradle -Arguments $arguments.ToArray()
 
-    $artifacts = Get-BuiltArtifacts
+    $version = Get-BuildVersion
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        throw "Could not read the HMCL version from the jar manifest in $($Script:LibsDirectory)."
+    }
+
+    $artifacts = Get-BuiltArtifacts -Version $version
     Show-Artifacts -Artifacts $artifacts
+    Show-StaleArtifacts -Version $version
 
     # The .exe is the HMCLauncher stub with the jar appended; the stub reports its own
     # version (3.7.0.1) in the file properties, so the resource is rewritten with the
@@ -163,7 +212,6 @@ try {
         Write-Step ""
         Write-Step "=== Writing the HMCL version into the executable ==="
         if (Update-HmclExecutable -ExePath $exe.FullName -JarPath $jar.FullName) {
-            $version = Get-JarVersion -JarPath $jar.FullName
             Write-Ok "Version set to $version in $($exe.Name)"
         }
     }
