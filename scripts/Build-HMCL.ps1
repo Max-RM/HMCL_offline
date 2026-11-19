@@ -9,6 +9,10 @@
         HMCL/build/libs/HMCL-<version>.sh
     plus the matching .sha1, .sha256 and .sha512 checksum files.
 
+    The Windows executable is the HMCLauncher stub with the jar appended. Its version
+    resource is rewritten so the file properties show the version from config/project.properties
+    (taken from the jar manifest) instead of the stub's own 3.7.0.1.
+
     The .deb package and the release archives are not built by this script;
     run Gradle directly if you need them.
 
@@ -54,6 +58,7 @@ param(
 )
 
 . (Join-Path $PSScriptRoot "_Common.ps1")
+. (Join-Path $PSScriptRoot "_ExeVersion.ps1")
 
 # Returns the jar/exe/sh artifacts produced by the build, sorted by name.
 function Get-BuiltArtifacts {
@@ -148,6 +153,20 @@ try {
 
     $artifacts = Get-BuiltArtifacts
     Show-Artifacts -Artifacts $artifacts
+
+    # The .exe is the HMCLauncher stub with the jar appended; the stub reports its own
+    # version (3.7.0.1) in the file properties, so the resource is rewritten with the
+    # version Gradle stamped into the jar manifest.
+    $exe = $artifacts | Where-Object { $_.Extension -eq ".exe" } | Select-Object -First 1
+    $jar = $artifacts | Where-Object { $_.Extension -eq ".jar" } | Select-Object -First 1
+    if ($null -ne $exe -and $null -ne $jar) {
+        Write-Step ""
+        Write-Step "=== Writing the HMCL version into the executable ==="
+        if (Update-HmclExecutable -ExePath $exe.FullName -JarPath $jar.FullName) {
+            $version = Get-JarVersion -JarPath $jar.FullName
+            Write-Ok "Version set to $version in $($exe.Name)"
+        }
+    }
 
     if ($NoPublish) {
         Write-Host ""
