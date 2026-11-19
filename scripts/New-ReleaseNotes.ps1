@@ -69,14 +69,6 @@ function Get-PublishedVersion {
     return ""
 }
 
-# Converts a byte count into the "11.56 MB" form used in release notes.
-# The invariant culture keeps the decimal point on machines with a comma separator.
-function Format-FileSize {
-    param([Parameter(Mandatory = $true)][long]$Bytes)
-
-    return [string]::Format([System.Globalization.CultureInfo]::InvariantCulture, "{0:0.00} MB", ($Bytes / 1MB))
-}
-
 # Reads the SHA-256 checksum of a file from its .sha256 file and verifies it.
 # Stops the script when the file is missing or does not match the artifact, because
 # publishing a release note with an incorrect checksum is worse than publishing none.
@@ -124,19 +116,8 @@ function Get-OriginRepository {
     return ""
 }
 
-# Describes how a file with the given extension is started.
-function Get-LaunchDescription {
-    param([Parameter(Mandatory = $true)][string]$Extension)
-
-    switch ($Extension) {
-        ".exe" { return "Windows, запускается двойным щелчком" }
-        ".jar" { return "любая ОС с Java 17+, запускается командой java -jar" }
-        ".sh" { return "Linux и macOS, запускается как ./HMCL-<version>.sh" }
-        default { return "" }
-    }
-}
-
-# Builds the Markdown release note for one version.
+# Builds the Markdown release note for one version, in the layout used by the official
+# HMCL releases: a download table with a link and the SHA-256 of every file.
 function New-ReleaseNoteText {
     param(
         [Parameter(Mandatory = $true)][string]$NoteVersion,
@@ -147,12 +128,10 @@ function New-ReleaseNoteText {
     $downloadBase = "https://github.com/$NoteRepository/releases/download/$NoteTag"
     $lines = New-Object System.Collections.Generic.List[string]
 
-    $lines.Add("Неофициальная сборка HMCL $NoteVersion для личного использования, собранная из форка https://github.com/$NoteRepository")
+    $lines.Add("Неофициальная сборка HMCL $NoteVersion, собранная из форка https://github.com/$NoteRepository")
     $lines.Add("")
-    $lines.Add("| File | Size | SHA-256 Checksum |")
-    $lines.Add("| --- | --- | --- |")
-
-    $launchLines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("| File | SHA-256 Checksum |")
+    $lines.Add('| ---  | --- |')
 
     foreach ($extension in $Script:ReleaseExtensions) {
         $name = "HMCL-$NoteVersion$extension"
@@ -161,33 +140,9 @@ function New-ReleaseNoteText {
             throw "Missing artifact: $file"
         }
 
-        $item = Get-Item -LiteralPath $file
         $sha256 = Get-VerifiedSha256 -Path $file
-        $size = Format-FileSize -Bytes $item.Length
-
-        $lines.Add("| [$name]($downloadBase/$name) | $size | ``$sha256`` |")
-
-        $description = Get-LaunchDescription -Extension $extension
-        $description = $description.Replace("<version>", $NoteVersion)
-        $launchLines.Add("- ``$name`` - $description")
+        $lines.Add("| [$name]($downloadBase/$name) | ``$sha256`` |")
     }
-
-    $lines.Add("")
-    $lines.Add("Все три файла — одна и та же сборка, отличается только способ запуска:")
-    $lines.Add("")
-    foreach ($line in $launchLines) {
-        $lines.Add($line)
-    }
-    $lines.Add("")
-    $lines.Add("Проверить контрольную сумму перед запуском:")
-    $lines.Add("")
-    $lines.Add('```powershell')
-    $lines.Add("Get-FileHash .\HMCL-$NoteVersion.exe -Algorithm SHA256")
-    $lines.Add('```')
-    $lines.Add("")
-    $lines.Add('```bash')
-    $lines.Add("sha256sum -c HMCL-$NoteVersion.exe.sha256")
-    $lines.Add('```')
 
     return ($lines -join "`n")
 }
